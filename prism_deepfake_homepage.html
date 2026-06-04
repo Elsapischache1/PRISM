@@ -1,0 +1,778 @@
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  :root {
+    --camel: #c6b39a;
+    --camel-light: #ede5da;
+    --camel-mid: #a89278;
+    --roast: #280b0f;
+    --roast-mid: #3d1218;
+    --roast-light: #5c1e26;
+    --boho: #7b694e;
+    --rubine: #6d3a3c;
+    --tamarind: #361319;
+  }
+  body {
+    background: var(--camel-light);
+    font-family: var(--font-sans, system-ui);
+  }
+  .app {
+    min-height: 100vh;
+  }
+
+  .page {
+    display: none;
+  }
+  .page.active {
+    display: block;
+  }
+
+  /* HOME PAGE */
+  .home-header {
+    background: var(--roast);
+    padding: 2.5rem 1.5rem 2rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .home-header::before {
+    content: "";
+    position: absolute;
+    top: -40px;
+    left: -40px;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    background: var(--roast-mid);
+  }
+  .home-header::after {
+    content: "";
+    position: absolute;
+    bottom: -30px;
+    right: -20px;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: var(--tamarind);
+  }
+  .logo-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--camel);
+    color: var(--roast);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 5px 14px;
+    border-radius: 20px;
+    margin-bottom: 1rem;
+    position: relative;
+    z-index: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .prism-title {
+    font-size: 32px;
+    font-weight: 500;
+    color: var(--camel-light);
+    letter-spacing: -0.5px;
+    position: relative;
+    z-index: 1;
+    margin-bottom: 0.4rem;
+  }
+  .prism-title span {
+    color: var(--camel);
+  }
+  .prism-sub {
+    font-size: 13px;
+    color: var(--camel-mid);
+    position: relative;
+    z-index: 1;
+    line-height: 1.5;
+    max-width: 280px;
+    margin: 0 auto 1.5rem;
+  }
+  .header-chips {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+  }
+  .chip {
+    font-size: 11px;
+    padding: 4px 10px;
+    background: var(--roast-mid);
+    color: var(--camel);
+    border-radius: 12px;
+    border: 0.5px solid var(--rubine);
+  }
+
+  .home-body {
+    padding: 1.5rem;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--boho);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+
+  .analysis-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 2rem;
+  }
+
+  .analysis-card {
+    background: var(--roast);
+    border-radius: 16px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    border: 0.5px solid var(--roast-light);
+    position: relative;
+    overflow: hidden;
+  }
+  .analysis-card:active {
+    transform: scale(0.98);
+  }
+  .analysis-card .card-glow {
+    position: absolute;
+    top: -30px;
+    right: -30px;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    opacity: 0.2;
+  }
+  .audio-card .card-glow {
+    background: var(--camel);
+  }
+  .video-card .card-glow {
+    background: var(--rubine);
+  }
+
+  .card-icon-wrap {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    margin-bottom: 1rem;
+  }
+  .audio-card .card-icon-wrap {
+    background: var(--roast-mid);
+    color: var(--camel);
+  }
+  .video-card .card-icon-wrap {
+    background: var(--tamarind);
+    color: var(--camel-light);
+  }
+
+  .card-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--camel-light);
+    margin-bottom: 0.3rem;
+  }
+  .card-desc {
+    font-size: 13px;
+    color: var(--camel-mid);
+    line-height: 1.5;
+    margin-bottom: 1rem;
+  }
+  .card-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .card-tag {
+    font-size: 11px;
+    padding: 3px 8px;
+    background: var(--tamarind);
+    color: var(--camel-mid);
+    border-radius: 8px;
+  }
+  .card-arrow {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.25rem;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--roast-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--camel);
+    font-size: 16px;
+  }
+
+  .info-strip {
+    background: var(--roast);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    border: 0.5px solid var(--roast-light);
+  }
+  .info-icon {
+    font-size: 18px;
+    color: var(--camel);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .info-text {
+    font-size: 12px;
+    color: var(--camel-mid);
+    line-height: 1.6;
+  }
+  .info-text strong {
+    color: var(--camel);
+    font-weight: 500;
+  }
+
+  /* ANALYSIS PAGES */
+  .analysis-header {
+    background: var(--roast);
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .back-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--roast-mid);
+    border: 0.5px solid var(--roast-light);
+    color: var(--camel);
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .page-title-wrap {
+  }
+  .page-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--camel-light);
+  }
+  .page-subtitle {
+    font-size: 12px;
+    color: var(--camel-mid);
+  }
+
+  .analysis-body {
+    padding: 1.25rem;
+  }
+
+  .upload-zone {
+    background: var(--roast);
+    border: 1.5px dashed var(--roast-light);
+    border-radius: 16px;
+    padding: 2rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    margin-bottom: 1rem;
+    position: relative;
+  }
+  .upload-zone:hover {
+    border-color: var(--camel-mid);
+  }
+  .upload-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+  .upload-icon {
+    font-size: 32px;
+    color: var(--camel);
+    margin-bottom: 0.75rem;
+  }
+  .upload-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--camel-light);
+    margin-bottom: 0.3rem;
+  }
+  .upload-hint {
+    font-size: 12px;
+    color: var(--boho);
+  }
+
+  .preview-box {
+    background: var(--roast);
+    border-radius: 12px;
+    padding: 1rem;
+    display: none;
+    margin-bottom: 1rem;
+    border: 0.5px solid var(--roast-light);
+  }
+  .preview-box.show {
+    display: block;
+  }
+  .preview-label {
+    font-size: 11px;
+    color: var(--camel-mid);
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  audio,
+  video {
+    width: 100%;
+    border-radius: 8px;
+  }
+
+  .analyze-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--camel);
+    color: var(--roast);
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition:
+      background 0.15s,
+      transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 1rem;
+  }
+  .analyze-btn:disabled {
+    background: var(--boho);
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+  .analyze-btn:not(:disabled):active {
+    transform: scale(0.98);
+  }
+
+  .result-card {
+    background: var(--roast);
+    border-radius: 16px;
+    padding: 1.5rem;
+    display: none;
+    border: 0.5px solid var(--roast-light);
+    margin-bottom: 1rem;
+  }
+  .result-card.show {
+    display: block;
+  }
+  .result-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 1rem;
+  }
+  .result-badge {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .badge-fake {
+    background: var(--rubine);
+    color: #f5c4c4;
+  }
+  .badge-real {
+    background: #1a3d1e;
+    color: #a8e6af;
+  }
+  .result-label {
+    font-size: 13px;
+    color: var(--camel-mid);
+  }
+
+  .confidence-bar-wrap {
+    margin-bottom: 1rem;
+  }
+  .confidence-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--camel-mid);
+    margin-bottom: 6px;
+  }
+  .confidence-bar-bg {
+    background: var(--tamarind);
+    border-radius: 6px;
+    height: 8px;
+  }
+  .confidence-bar-fill {
+    height: 8px;
+    border-radius: 6px;
+    background: var(--camel);
+    transition: width 0.8s ease;
+  }
+
+  .result-details {
+    border-top: 0.5px solid var(--roast-light);
+    padding-top: 1rem;
+  }
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+  }
+  .detail-key {
+    font-size: 12px;
+    color: var(--boho);
+  }
+  .detail-val {
+    font-size: 12px;
+    color: var(--camel-light);
+    font-weight: 500;
+  }
+
+  .loading-state {
+    text-align: center;
+    padding: 1.5rem 0;
+    display: none;
+  }
+  .loading-state.show {
+    display: block;
+  }
+  .spinner {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 3px solid var(--roast-light);
+    border-top-color: var(--camel);
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 1rem;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .loading-text {
+    font-size: 14px;
+    color: var(--camel-mid);
+  }
+</style>
+
+<div class="app">
+  <!-- HOME PAGE -->
+  <div id="page-home" class="page active">
+    <div class="home-header">
+      <div class="logo-badge">
+        <i class="ti ti-radar" aria-hidden="true"></i>PRISM
+      </div>
+      <div class="prism-title"><span>P</span>RISM</div>
+      <div class="prism-sub">
+        ML-based multimodal deepfake detection using audio-visual fusion
+      </div>
+      <div class="header-chips">
+        <span class="chip">EfficientNet-B4</span>
+        <span class="chip">Whisper</span>
+        <span class="chip">FastAPI</span>
+      </div>
+    </div>
+
+    <div class="home-body">
+      <p class="section-label">Choose analysis type</p>
+      <div class="analysis-cards">
+        <div class="analysis-card audio-card" onclick="showPage('audio')">
+          <div class="card-glow"></div>
+          <div class="card-arrow">
+            <i class="ti ti-arrow-right" aria-hidden="true"></i>
+          </div>
+          <div class="card-icon-wrap">
+            <i class="ti ti-microphone" aria-hidden="true"></i>
+          </div>
+          <div class="card-title">Audio deepfake analysis</div>
+          <div class="card-desc">
+            Upload an audio file to detect AI-generated or cloned voice content
+            using MFCC spectral features.
+          </div>
+          <div class="card-tags">
+            <span class="card-tag">Voice cloning</span>
+            <span class="card-tag">MFCC features</span>
+            <span class="card-tag">Whisper model</span>
+          </div>
+        </div>
+
+        <div class="analysis-card video-card" onclick="showPage('video')">
+          <div class="card-glow"></div>
+          <div class="card-arrow">
+            <i class="ti ti-arrow-right" aria-hidden="true"></i>
+          </div>
+          <div class="card-icon-wrap">
+            <i class="ti ti-video" aria-hidden="true"></i>
+          </div>
+          <div class="card-title">Video deepfake analysis</div>
+          <div class="card-desc">
+            Upload a video to detect facial manipulations, identity swaps, and
+            frame-level visual artifacts.
+          </div>
+          <div class="card-tags">
+            <span class="card-tag">Face swap</span>
+            <span class="card-tag">Frame artifacts</span>
+            <span class="card-tag">EfficientNet-B4</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-strip">
+        <i class="ti ti-info-circle info-icon" aria-hidden="true"></i>
+        <div class="info-text">
+          <strong>How it works:</strong> PRISM fuses audio and visual signals
+          for multimodal detection — overcoming the limits of single-modality
+          systems.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUDIO PAGE -->
+  <div id="page-audio" class="page">
+    <div class="analysis-header">
+      <div class="back-btn" onclick="showPage('home')">
+        <i class="ti ti-arrow-left" aria-hidden="true"></i>
+      </div>
+      <div class="page-title-wrap">
+        <div class="page-title">
+          <i class="ti ti-microphone" aria-hidden="true"></i> Audio analysis
+        </div>
+        <div class="page-subtitle">Detect voice cloning & synthetic audio</div>
+      </div>
+    </div>
+    <div class="analysis-body">
+      <div class="upload-zone" id="audio-upload-zone">
+        <input
+          type="file"
+          accept="audio/*"
+          id="audio-input"
+          onchange="handleAudioFile(this)"
+        />
+        <div class="upload-icon">
+          <i class="ti ti-file-music" aria-hidden="true"></i>
+        </div>
+        <div class="upload-title">Upload audio file</div>
+        <div class="upload-hint">MP3, WAV, M4A supported</div>
+      </div>
+
+      <div class="preview-box" id="audio-preview">
+        <div class="preview-label">Preview</div>
+        <audio id="audio-player" controls></audio>
+      </div>
+
+      <button
+        class="analyze-btn"
+        id="audio-analyze-btn"
+        disabled
+        onclick="runAnalysis('audio')"
+      >
+        <i class="ti ti-radar" aria-hidden="true"></i> Analyze audio
+      </button>
+
+      <div class="loading-state" id="audio-loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Analyzing audio features…</div>
+      </div>
+
+      <div class="result-card" id="audio-result">
+        <div class="result-header">
+          <span class="result-badge" id="audio-badge">FAKE</span>
+          <span class="result-label">Prediction result</span>
+        </div>
+        <div class="confidence-bar-wrap">
+          <div class="confidence-labels">
+            <span>Confidence score</span>
+            <span id="audio-conf-label">0%</span>
+          </div>
+          <div class="confidence-bar-bg">
+            <div
+              class="confidence-bar-fill"
+              id="audio-conf-bar"
+              style="width: 0%"
+            ></div>
+          </div>
+        </div>
+        <div class="result-details">
+          <div class="detail-row">
+            <span class="detail-key">Model used</span>
+            <span class="detail-val">Whisper + SVM</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Feature type</span>
+            <span class="detail-val">MFCC spectral</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Status</span>
+            <span class="detail-val" id="audio-status">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIDEO PAGE -->
+  <div id="page-video" class="page">
+    <div class="analysis-header">
+      <div class="back-btn" onclick="showPage('home')">
+        <i class="ti ti-arrow-left" aria-hidden="true"></i>
+      </div>
+      <div class="page-title-wrap">
+        <div class="page-title">
+          <i class="ti ti-video" aria-hidden="true"></i> Video analysis
+        </div>
+        <div class="page-subtitle">Detect face swaps & visual artifacts</div>
+      </div>
+    </div>
+    <div class="analysis-body">
+      <div class="upload-zone" id="video-upload-zone">
+        <input
+          type="file"
+          accept="video/*"
+          id="video-input"
+          onchange="handleVideoFile(this)"
+        />
+        <div class="upload-icon">
+          <i class="ti ti-file-video" aria-hidden="true"></i>
+        </div>
+        <div class="upload-title">Upload video file</div>
+        <div class="upload-hint">MP4, MOV, AVI supported</div>
+      </div>
+
+      <div class="preview-box" id="video-preview">
+        <div class="preview-label">Preview</div>
+        <video id="video-player" controls></video>
+      </div>
+
+      <button
+        class="analyze-btn"
+        id="video-analyze-btn"
+        disabled
+        onclick="runAnalysis('video')"
+      >
+        <i class="ti ti-radar" aria-hidden="true"></i> Analyze video
+      </button>
+
+      <div class="loading-state" id="video-loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Analyzing frames & facial features…</div>
+      </div>
+
+      <div class="result-card" id="video-result">
+        <div class="result-header">
+          <span class="result-badge" id="video-badge">FAKE</span>
+          <span class="result-label">Prediction result</span>
+        </div>
+        <div class="confidence-bar-wrap">
+          <div class="confidence-labels">
+            <span>Confidence score</span>
+            <span id="video-conf-label">0%</span>
+          </div>
+          <div class="confidence-bar-bg">
+            <div
+              class="confidence-bar-fill"
+              id="video-conf-bar"
+              style="width: 0%"
+            ></div>
+          </div>
+        </div>
+        <div class="result-details">
+          <div class="detail-row">
+            <span class="detail-key">Model used</span>
+            <span class="detail-val">EfficientNet-B4</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Feature type</span>
+            <span class="detail-val">Visual / facial</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Status</span>
+            <span class="detail-val" id="video-status">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showPage(name) {
+    document
+      .querySelectorAll(".page")
+      .forEach((p) => p.classList.remove("active"));
+    document.getElementById("page-" + name).classList.add("active");
+  }
+
+  function handleAudioFile(input) {
+    if (!input.files[0]) return;
+    const url = URL.createObjectURL(input.files[0]);
+    document.getElementById("audio-player").src = url;
+    document.getElementById("audio-preview").classList.add("show");
+    document.getElementById("audio-analyze-btn").disabled = false;
+    document.getElementById("audio-result").classList.remove("show");
+    document.getElementById("audio-loading").classList.remove("show");
+  }
+
+  function handleVideoFile(input) {
+    if (!input.files[0]) return;
+    const url = URL.createObjectURL(input.files[0]);
+    document.getElementById("video-player").src = url;
+    document.getElementById("video-preview").classList.add("show");
+    document.getElementById("video-analyze-btn").disabled = false;
+    document.getElementById("video-result").classList.remove("show");
+    document.getElementById("video-loading").classList.remove("show");
+  }
+
+  function runAnalysis(type) {
+    const btn = document.getElementById(type + "-analyze-btn");
+    const loading = document.getElementById(type + "-loading");
+    const result = document.getElementById(type + "-result");
+
+    btn.disabled = true;
+    loading.classList.add("show");
+    result.classList.remove("show");
+
+    setTimeout(() => {
+      loading.classList.remove("show");
+      const isFake = Math.random() > 0.45;
+      const conf = Math.round(72 + Math.random() * 24);
+
+      const badge = document.getElementById(type + "-badge");
+      badge.textContent = isFake ? "DEEPFAKE" : "AUTHENTIC";
+      badge.className =
+        "result-badge " + (isFake ? "badge-fake" : "badge-real");
+
+      document.getElementById(type + "-conf-label").textContent = conf + "%";
+      document.getElementById(type + "-conf-bar").style.width = conf + "%";
+      document.getElementById(type + "-status").textContent = isFake
+        ? "Manipulation detected"
+        : "No manipulation found";
+
+      result.classList.add("show");
+      btn.disabled = false;
+    }, 2200);
+  }
+</script>
