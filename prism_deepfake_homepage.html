@@ -618,16 +618,40 @@
         </div>
         <div class="result-details">
           <div class="detail-row">
-            <span class="detail-key">Model used</span>
-            <span class="detail-val">Whisper + SVM</span>
+            <span class="detail-key">Model</span>
+            <span class="detail-val">Calibrated SVM</span>
           </div>
           <div class="detail-row">
-            <span class="detail-key">Feature type</span>
-            <span class="detail-val">MFCC spectral</span>
+            <span class="detail-key">Features</span>
+            <span class="detail-val">MFCC + Δ-MFCC + Chroma + Mel + Spectral</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Feature vector</span>
+            <span class="detail-val">334-dim</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Sample rate</span>
+            <span class="detail-val">16 kHz · 4s window</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">P(Real)</span>
+            <span class="detail-val" id="audio-p-real">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">P(Fake)</span>
+            <span class="detail-val" id="audio-p-fake">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Threshold</span>
+            <span class="detail-val" id="audio-threshold">—</span>
           </div>
           <div class="detail-row">
             <span class="detail-key">Status</span>
             <span class="detail-val" id="audio-status">—</span>
+          </div>
+          <div class="detail-row" id="audio-borderline-row" style="display:none">
+            <span class="detail-key">⚠ Warning</span>
+            <span class="detail-val" style="color:#e8c97a">Borderline — treat with caution</span>
           </div>
         </div>
       </div>
@@ -701,12 +725,16 @@
         </div>
         <div class="result-details">
           <div class="detail-row">
-            <span class="detail-key">Model used</span>
+            <span class="detail-key">Model</span>
             <span class="detail-val">EfficientNet-B4</span>
           </div>
           <div class="detail-row">
-            <span class="detail-key">Feature type</span>
-            <span class="detail-val">Visual / facial</span>
+            <span class="detail-key">Face detection</span>
+            <span class="detail-val">MTCNN</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Features</span>
+            <span class="detail-val">Visual / facial artifacts</span>
           </div>
           <div class="detail-row">
             <span class="detail-key">Status</span>
@@ -719,6 +747,8 @@
 </div>
 
 <script>
+  const API_BASE = "http://localhost:8000";
+
   function showPage(name) {
     document
       .querySelectorAll(".page")
@@ -746,33 +776,69 @@
     document.getElementById("video-loading").classList.remove("show");
   }
 
-  function runAnalysis(type) {
-    const btn = document.getElementById(type + "-analyze-btn");
+  async function runAnalysis(type) {
+    const btn     = document.getElementById(type + "-analyze-btn");
     const loading = document.getElementById(type + "-loading");
-    const result = document.getElementById(type + "-result");
+    const result  = document.getElementById(type + "-result");
+    const fileInput = document.getElementById(type + "-input");
+
+    if (!fileInput.files[0]) return;
 
     btn.disabled = true;
     loading.classList.add("show");
     result.classList.remove("show");
 
-    setTimeout(() => {
+    // ── Audio: call real backend ───────────────────────────────────────────
+    if (type === "audio") {
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+
+      try {
+        const res = await fetch(`${API_BASE}/predict/audio`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `Server error ${res.status}`);
+        }
+
+        const data = await res.json();
+        // data keys: label, confidence, status, p_real, p_fake, threshold, borderline, file
+
+        const badge = document.getElementById("audio-badge");
+        badge.textContent = data.label;                          // "DEEPFAKE" or "AUTHENTIC"
+        badge.className   = "result-badge " + (data.label === "DEEPFAKE" ? "badge-fake" : "badge-real");
+
+        const conf = data.confidence;
+        document.getElementById("audio-conf-label").textContent = conf.toFixed(1) + "%";
+        document.getElementById("audio-conf-bar").style.width   = conf + "%";
+
+        document.getElementById("audio-status").textContent     = data.status;
+        document.getElementById("audio-p-real").textContent     = data.p_real.toFixed(1) + "%";
+        document.getElementById("audio-p-fake").textContent     = data.p_fake.toFixed(1) + "%";
+        document.getElementById("audio-threshold").textContent  = data.threshold;
+
+        const borderlineRow = document.getElementById("audio-borderline-row");
+        borderlineRow.style.display = data.borderline ? "flex" : "none";
+
+        result.classList.add("show");
+
+      } catch (err) {
+        alert("Audio analysis failed:\n" + err.message +
+              "\n\nMake sure the backend is running:\n  cd backend/audio_deepfake\n  uvicorn api:app --reload --port 8000");
+      } finally {
+        loading.classList.remove("show");
+        btn.disabled = false;
+      }
+    }
+
+    // ── Video: not yet implemented ─────────────────────────────────────────
+    if (type === "video") {
       loading.classList.remove("show");
-      const isFake = Math.random() > 0.45;
-      const conf = Math.round(72 + Math.random() * 24);
-
-      const badge = document.getElementById(type + "-badge");
-      badge.textContent = isFake ? "DEEPFAKE" : "AUTHENTIC";
-      badge.className =
-        "result-badge " + (isFake ? "badge-fake" : "badge-real");
-
-      document.getElementById(type + "-conf-label").textContent = conf + "%";
-      document.getElementById(type + "-conf-bar").style.width = conf + "%";
-      document.getElementById(type + "-status").textContent = isFake
-        ? "Manipulation detected"
-        : "No manipulation found";
-
-      result.classList.add("show");
       btn.disabled = false;
-    }, 2200);
+      alert("Video detection model is not yet implemented.\nAudio analysis is fully functional.");
+    }
   }
 </script>
