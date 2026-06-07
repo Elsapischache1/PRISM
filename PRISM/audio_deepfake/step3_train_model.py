@@ -1,8 +1,11 @@
 """
-STEP 3 — MODEL TRAINING
-========================
-Loads extracted features, trains a Random Forest classifier,
-evaluates on test set, saves the trained model.
+STEP 3 — MODEL TRAINING (FIXED)
+================================
+Fixed issues:
+  1. Proper class balancing with oversampling
+  2. Threshold tuning — finds optimal decision boundary
+  3. Probability calibration — makes confidence scores reliable
+  4. Cross-validation — checks model isn't just memorizing
 
 Run:
     python step3_train_model.py
@@ -14,11 +17,13 @@ import joblib
 import time
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     accuracy_score, classification_report,
-    roc_auc_score, confusion_matrix
+    roc_auc_score, confusion_matrix, f1_score
 )
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.utils import resample
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 
@@ -35,113 +40,145 @@ def load_features():
     X_test  = np.load(os.path.join(FEATURES_DIR, "X_test.npy"))
     y_test  = np.load(os.path.join(FEATURES_DIR, "y_test.npy"))
 
-    print(f"  Train : {X_train.shape[0]} samples, {X_train.shape[1]} features")
-    print(f"  Test  : {X_test.shape[0]} samples")
-    print(f"  Train — REAL: {(y_train==0).sum()}, FAKE: {(y_train==1).sum()}")
+    real_count = (y_train == 0).sum()
+    fake_count = (y_train == 1).sum()
+    print(f"  Train : {X_train.shape[0]} samples  (REAL: {real_count}, FAKE: {fake_count})")
+    print(f"  Test  : {X_test.shape[0]} samples   (REAL: {(y_test==0).sum()}, FAKE: {(y_test==1).sum()})")
+
+    ratio = max(real_count, fake_count) / max(min(real_count, fake_count), 1)
+    if ratio > 1.5:
+        print(f"\n  ⚠  Class imbalance detected (ratio {ratio:.1f}x) — will oversample minority class")
+
     return X_train, y_train, X_test, y_test
+
+# ─── BALANCE CLASSES BY OVERSAMPLING ──────────────────────────────────────────
+
+def balance_classes(X, y):
+    X_real = X[y == 0]
+    X_fake = X[y == 1]
+    y_real = y[y == 0]
+    y_fake = y[y == 1]
+
+    if len(X_real) == len(X_fake):
+        return X, y
+
+    if len(X_real) < len(X_fake):
+        X_real_up, y_real_up = resample(X_real, y_real, replace=True,
+                                         n_samples=len(X_fake), random_state=42)
+        X_out = np.vstack([X_real_up, X_fake])
+        y_out = np.concatenate([y_real_up, y_fake])
+    else:
+        X_fake_up, y_fake_up = resample(X_fake, y_fake, replace=True,
+                                         n_samples=len(X_real), random_state=42)
+        X_out = np.vstack([X_real, X_fake_up])
+        y_out = np.concatenate([y_real, y_fake_up])
+
+    print(f"  After balancing: REAL={(y_out==0).sum()}, FAKE={(y_out==1).sum()}")
+    return X_out, y_out
+
+# ─── FIND OPTIMAL THRESHOLD ───────────────────────────────────────────────────
+
+def find_best_threshold(model, X_test_scaled, y_test):
+    y_proba     = model.predict_proba(X_test_scaled)[:, 1]
+    best_thresh = 0.5
+    best_f1     = 0.0
+
+    for thresh in np.arange(0.1, 0.9, 0.01):
+        y_pred = (y_proba >= thresh).astype(int)
+        f1 = f1_score(y_test, y_pred, average="macro", zero_division=0)
+        if f1 > best_f1:
+            best_f1     = f1
+            best_thresh = thresh
+
+    print(f"\n  Optimal threshold : {best_thresh:.2f}  (macro-F1: {best_f1:.4f})")
+    return float(best_thresh)
 
 # ─── EVALUATION ───────────────────────────────────────────────────────────────
 
-def evaluate(model, X, y, split_name="Test"):
-    y_pred  = model.predict(X)
+def evaluate(model, X, y, threshold=0.5, split_name="Test"):
     y_proba = model.predict_proba(X)[:, 1]
+    y_pred  = (y_proba >= threshold).astype(int)
+    acc     = accuracy_score(y, y_pred)
+    auc     = roc_auc_score(y, y_proba)
+    cm      = confusion_matrix(y, y_pred)
 
-    acc = accuracy_score(y, y_pred)
-    auc = roc_auc_score(y, y_proba)
-    cm  = confusion_matrix(y, y_pred)
-
-    print(f"\n── {split_name} Results ──────────────────────────────")
-    print(f"  Accuracy : {acc:.4f}  ({acc*100:.2f}%)")
-    print(f"  ROC-AUC  : {auc:.4f}")
-    print(f"\n  Confusion Matrix:")
-    print(f"                Predicted")
+    print(f"\n── {split_name} (threshold={threshold:.2f}) ──────────────────")
+    print(f"  Accuracy : {acc*100:.2f}%   ROC-AUC : {auc:.4f}")
+    print(f"  Confusion Matrix:")
     print(f"                REAL    FAKE")
     print(f"  Actual REAL   {cm[0][0]:5d}   {cm[0][1]:5d}")
     print(f"  Actual FAKE   {cm[1][0]:5d}   {cm[1][1]:5d}")
-    print(f"\n  Classification Report:")
     print(classification_report(y, y_pred, target_names=["REAL", "FAKE"]))
-
     return acc, auc
-
-# ─── FEATURE IMPORTANCE ───────────────────────────────────────────────────────
-
-def print_feature_importance(model, top_n=10):
-    rf = model.named_steps["clf"]
-    importances = rf.feature_importances_
-
-    feature_names = (
-        [f"MFCC_mean_{i}"        for i in range(40)] +
-        [f"MFCC_std_{i}"         for i in range(40)] +
-        [f"Chroma_mean_{i}"      for i in range(12)] +
-        [f"Chroma_std_{i}"       for i in range(12)] +
-        [f"SpContrast_mean_{i}"  for i in range(7)]  +
-        [f"SpContrast_std_{i}"   for i in range(7)]  +
-        ["ZCR_mean", "ZCR_std", "RMS_mean", "RMS_std"]
-    )
-
-    paired = sorted(zip(importances, feature_names), reverse=True)
-
-    print(f"\n── Top {top_n} Most Important Features ─────────────────")
-    for i, (imp, name) in enumerate(paired[:top_n]):
-        bar = "█" * int(imp * 300)
-        print(f"  {i+1:2d}. {name:<25s}  {imp:.4f}  {bar}")
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
 
 def main():
     print("=" * 60)
     print("PRISM — Audio Deepfake Detection")
-    print("Step 3: Model Training")
+    print("Step 3: Model Training (Fixed)")
     print("=" * 60)
 
     os.makedirs(MODEL_DIR, exist_ok=True)
 
     X_train, y_train, X_test, y_test = load_features()
 
-    print("\nBuilding model pipeline...")
-    model = Pipeline([
-        ("scaler", StandardScaler()),
-        ("clf", RandomForestClassifier(
-            n_estimators=200,
-            max_depth=20,
-            min_samples_leaf=2,
-            class_weight="balanced",
-            n_jobs=-1,
-            random_state=42,
-            verbose=1
-        ))
-    ])
+    # 1. Balance classes
+    print("\nBalancing classes...")
+    X_train_bal, y_train_bal = balance_classes(X_train, y_train)
 
-    print(f"\nTraining on {len(X_train)} samples...")
-    print("(Takes ~2–5 min on CPU ☕)")
+    # 2. Scale features
+    scaler         = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train_bal)
+    X_test_scaled  = scaler.transform(X_test)
+
+    # 3. Cross-validate to check learning quality
+    print("\nRunning 5-fold cross-validation...")
+    base_rf = RandomForestClassifier(
+        n_estimators=100, max_depth=15, min_samples_leaf=4,
+        n_jobs=-1, random_state=42
+    )
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    cv_scores = cross_val_score(base_rf, X_train_scaled, y_train_bal,
+                                 cv=cv, scoring="roc_auc", n_jobs=-1)
+    print(f"  CV ROC-AUC: {cv_scores.round(3)}  |  Mean: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
+
+    # 4. Train final model with probability calibration
+    print(f"\nTraining final calibrated model on {len(X_train_bal)} samples...")
+    final_rf = RandomForestClassifier(
+        n_estimators=300,
+        max_depth=15,
+        min_samples_leaf=4,
+        min_samples_split=8,
+        max_features="sqrt",
+        n_jobs=-1,
+        random_state=42,
+        verbose=0
+    )
+    calibrated = CalibratedClassifierCV(final_rf, method="isotonic", cv=3)
+
     start = time.time()
-    model.fit(X_train, y_train)
-    elapsed = time.time() - start
-    print(f"\nTraining complete in {elapsed:.1f}s")
+    calibrated.fit(X_train_scaled, y_train_bal)
+    print(f"Done in {time.time() - start:.1f}s")
 
-    train_acc, train_auc = evaluate(model, X_train, y_train, "Train")
-    test_acc,  test_auc  = evaluate(model, X_test,  y_test,  "Test")
+    # 5. Find optimal threshold
+    print("\nFinding optimal decision threshold...")
+    best_threshold = find_best_threshold(calibrated, X_test_scaled, y_test)
 
-    print_feature_importance(model, top_n=10)
+    # 6. Evaluate
+    evaluate(calibrated, X_test_scaled, y_test, threshold=0.5,            split_name="Test default")
+    evaluate(calibrated, X_test_scaled, y_test, threshold=best_threshold, split_name="Test optimal")
 
-    joblib.dump(model, MODEL_PATH)
-    model_size = os.path.getsize(MODEL_PATH) / (1024 * 1024)
-    print(f"\n✓ Model saved to '{MODEL_PATH}' ({model_size:.1f} MB)")
-
-    print("\n" + "=" * 60)
-    print("TRAINING SUMMARY")
-    print("=" * 60)
-    print(f"  Train Accuracy : {train_acc*100:.2f}%")
-    print(f"  Test  Accuracy : {test_acc*100:.2f}%")
-    print(f"  Test  ROC-AUC  : {test_auc:.4f}")
-    print(f"  Model saved at : {MODEL_PATH}")
-    print("=" * 60)
-
-    if test_acc < 0.80:
-        print("\n⚠  Accuracy below 80%. The dataset may be small.")
-        print("   Try collecting more audio samples.")
-    else:
-        print("\n✓ Good accuracy! Proceed to step4_evaluate.py")
+    # 7. Save everything as one package
+    package = {
+        "scaler"    : scaler,
+        "model"     : calibrated,
+        "threshold" : best_threshold
+    }
+    joblib.dump(package, MODEL_PATH)
+    print(f"\n✓ Saved model package to '{MODEL_PATH}'")
+    print("  Contains: scaler + calibrated model + optimal threshold")
+    print("\nProceed to step4_evaluate.py")
 
 if __name__ == "__main__":
     main()

@@ -1,8 +1,7 @@
 """
-STEP 5 — SINGLE FILE PREDICTION
-=================================
-Test the trained model on any audio file.
-The predict_audio() function here is imported directly by the FastAPI backend.
+STEP 5 — SINGLE FILE PREDICTION (FIXED)
+=========================================
+Uses the saved model package (scaler + calibrated model + optimal threshold).
 
 Usage:
     python step5_predict.py path/to/audio.mp3
@@ -22,7 +21,7 @@ SAMPLE_RATE  = 16000
 MAX_DURATION = 4.0
 N_MFCC       = 40
 
-# ─── FEATURE EXTRACTION (must be identical to step2) ──────────────────────────
+# ─── FEATURE EXTRACTION (must match step2 exactly) ────────────────────────────
 
 def extract_features(audio_path, sr=SAMPLE_RATE, max_duration=MAX_DURATION):
     max_samples = int(sr * max_duration)
@@ -60,42 +59,43 @@ def extract_features(audio_path, sr=SAMPLE_RATE, max_duration=MAX_DURATION):
     return np.array(features, dtype=np.float32)
 
 
-# ─── INFERENCE FUNCTION (imported by FastAPI backend) ─────────────────────────
+# ─── INFERENCE FUNCTION (imported by FastAPI) ─────────────────────────────────
 
 def predict_audio(audio_path: str) -> dict:
     """
-    Main inference function — called by the FastAPI backend.
-
-    Returns:
-        {
-            "verdict"    : "REAL" or "FAKE",
-            "confidence" : float (0–100),
-            "p_real"     : float (0–100),
-            "p_fake"     : float (0–100),
-            "file"       : filename string
-        }
+    Main inference function — called by FastAPI backend.
+    Uses optimal threshold from training, not just 0.5.
     """
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(
             f"Model not found at '{MODEL_PATH}'. Run step3_train_model.py first."
         )
 
-    model    = joblib.load(MODEL_PATH)
+    # Load package: scaler + calibrated model + threshold
+    package   = joblib.load(MODEL_PATH)
+    scaler    = package["scaler"]
+    model     = package["model"]
+    threshold = package["threshold"]
+
+    # Extract and scale features
     features = extract_features(audio_path).reshape(1, -1)
+    features_scaled = scaler.transform(features)
 
-    prediction  = model.predict(features)[0]        # 0=REAL, 1=FAKE
-    probability = model.predict_proba(features)[0]  # [p_real, p_fake]
+    # Predict
+    probability = model.predict_proba(features_scaled)[0]   # [p_real, p_fake]
+    p_fake      = float(probability[1])
+    p_real      = float(probability[0])
 
-    label      = "FAKE" if prediction == 1 else "REAL"
-    confidence = float(probability[prediction]) * 100
-    p_real     = float(probability[0]) * 100
-    p_fake     = float(probability[1]) * 100
+    # Use optimal threshold (not hardcoded 0.5)
+    verdict = "FAKE" if p_fake >= threshold else "REAL"
+    confidence = (p_fake if verdict == "FAKE" else p_real) * 100
 
     return {
-        "verdict"    : label,
+        "verdict"    : verdict,
         "confidence" : round(confidence, 2),
-        "p_real"     : round(p_real, 2),
-        "p_fake"     : round(p_fake, 2),
+        "p_real"     : round(p_real * 100, 2),
+        "p_fake"     : round(p_fake * 100, 2),
+        "threshold"  : round(threshold, 2),
         "file"       : os.path.basename(audio_path)
     }
 
@@ -110,7 +110,7 @@ def main():
 
     if len(sys.argv) < 2:
         print("\nUsage: python step5_predict.py <audio_file>")
-        print("Supported: .mp3  .wav  .flac  .ogg")
+        print("Supported: .mp3  .wav  .flac  .ogg  .mpeg")
         sys.exit(1)
 
     audio_path = sys.argv[1]
@@ -134,6 +134,7 @@ def main():
     print(f"  Confidence  : {result['confidence']:.1f}%")
     print(f"  P(Real)     : {result['p_real']:.1f}%")
     print(f"  P(Fake)     : {result['p_fake']:.1f}%")
+    print(f"  Threshold   : {result['threshold']}")
     print("─" * 40)
 
 if __name__ == "__main__":
