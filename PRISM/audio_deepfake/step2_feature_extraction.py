@@ -1,12 +1,14 @@
 """
-STEP 2 — FEATURE EXTRACTION
-============================
-Reads REAL/ and FAKE/ folders from DEEP-VOICE dataset,
-extracts audio features using librosa,
-saves feature matrix + labels as .npy files.
+STEP 2 — FEATURE EXTRACTION (FoR-norm)
+========================================
+Reads the pre-split FoR-norm dataset (training / validation / testing),
+extracts audio features using librosa, and saves feature matrices as .npy.
 
-Install dependencies first:
-    pip install librosa numpy scikit-learn tqdm soundfile
+Key differences from DEEP-VOICE pipeline:
+  • FoR-norm is already split — we respect those splits, no random re-splitting
+  • Files are already 16 kHz mono WAV — matches our SAMPLE_RATE exactly
+  • Three output splits: train, val, test (not just train/test)
+  • Validation set is saved separately for use in step 3 (threshold tuning)
 
 Run:
     python step2_feature_extraction.py
@@ -16,20 +18,20 @@ import os
 import numpy as np
 import librosa
 from tqdm import tqdm
-from sklearn.model_selection import train_test_split
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 
-REAL_DIR     = "../dataset/DEEP-VOICE/REAL"
-FAKE_DIR     = "../dataset/DEEP-VOICE/FAKE"
+DATASET_ROOT = "../dataset/for-norm"
 OUTPUT_DIR   = "features"
 
-SAMPLE_RATE  = 16000   # resample all audio to this
-MAX_DURATION = 4.0     # seconds — clip/pad all audio to this
-N_MFCC       = 40      # number of MFCC coefficients
+# FoR-norm is already at 16 kHz mono — we match that exactly
+SAMPLE_RATE  = 16000
+MAX_DURATION = 4.0    # seconds — clip or pad to this length
+N_MFCC       = 40     # number of MFCC coefficients
 
-TEST_SIZE    = 0.2     # 80% train, 20% test split
-RANDOM_SEED  = 42
+# Labels
+LABEL_REAL = 0
+LABEL_FAKE = 1
 
 # ─── FEATURE EXTRACTION ───────────────────────────────────────────────────────
 
@@ -38,17 +40,18 @@ def extract_features(audio_path, sr=SAMPLE_RATE, max_duration=MAX_DURATION):
     Extracts a fixed-size 122-feature vector from one audio file.
 
     Features:
-      - MFCC mean & std        (40 × 2 = 80)
-      - Chroma mean & std      (12 × 2 = 24)
+      - MFCC mean & std           (40 × 2 = 80)
+      - Chroma mean & std         (12 × 2 = 24)
       - Spectral contrast mean & std (7 × 2 = 14)
-      - Zero crossing rate mean & std      (2)
-      - RMS energy mean & std              (2)
-      ─────────────────────────────────────────
+      - Zero crossing rate mean & std          (2)
+      - RMS energy mean & std                  (2)
+      ──────────────────────────────────────────────
       Total: 122 features
     """
     max_samples = int(sr * max_duration)
 
     try:
+        # FoR-norm WAVs are already 16 kHz mono — librosa will still work fine
         y, _ = librosa.load(audio_path, sr=sr, duration=max_duration, mono=True)
     except Exception as e:
         return None
@@ -87,33 +90,54 @@ def extract_features(audio_path, sr=SAMPLE_RATE, max_duration=MAX_DURATION):
     return np.array(features, dtype=np.float32)
 
 
-# ─── LOAD ALL FILES ───────────────────────────────────────────────────────────
+# ─── LOAD ONE SPLIT ───────────────────────────────────────────────────────────
 
-def load_folder(folder_path, label, label_name):
-    """Load all audio files from a folder and extract features."""
-    supported = (".mp3", ".wav", ".flac", ".ogg")
-    files = [f for f in os.listdir(folder_path) if f.lower().endswith(supported)]
+def load_split(split_name):
+    """
+    Loads all real + fake files from one FoR-norm split folder.
+    Returns X (feature matrix) and y (labels).
+    """
+    supported = (".wav", ".mp3", ".flac", ".ogg")
 
-    print(f"\n[{label_name}] Found {len(files)} files in {folder_path}")
+    real_dir = os.path.join(DATASET_ROOT, split_name, "real")
+    fake_dir = os.path.join(DATASET_ROOT, split_name, "fake")
+
+    for d in [real_dir, fake_dir]:
+        if not os.path.exists(d):
+            raise FileNotFoundError(
+                f"Expected folder not found: {d}\n"
+                f"Run step1_dataset_setup.py to verify your dataset."
+            )
 
     X, y = [], []
-    failed = 0
 
-    for fname in tqdm(files, desc=f"Extracting [{label_name}]"):
-        fpath = os.path.join(folder_path, fname)
-        feats = extract_features(fpath)
+    for folder, label, label_name in [
+        (real_dir, LABEL_REAL, "real"),
+        (fake_dir, LABEL_FAKE, "fake"),
+    ]:
+        files   = [f for f in os.listdir(folder) if f.lower().endswith(supported)]
+        failed  = 0
 
-        if feats is None:
-            failed += 1
-            continue
+        print(f"  [{split_name}/{label_name}]  {len(files):,} files")
 
-        X.append(feats)
-        y.append(label)
+        for fname in tqdm(files, desc=f"  Extracting {split_name}/{label_name}"):
+            fpath = os.path.join(folder, fname)
+            feats = extract_features(fpath)
+            if feats is None:
+                failed += 1
+                continue
+            X.append(feats)
+            y.append(label)
 
-    if failed > 0:
-        print(f"  Warning: {failed} files skipped (unreadable or corrupt)")
+        if failed:
+            print(f"    ⚠  {failed} files skipped (unreadable / corrupt)")
 
-    print(f"  Successfully extracted: {len(X)} files")
+    X = np.array(X, dtype=np.float32)
+    y = np.array(y, dtype=np.int32)
+
+    real_n = (y == LABEL_REAL).sum()
+    fake_n = (y == LABEL_FAKE).sum()
+    print(f"  → {split_name}: {len(X):,} samples  (real={real_n:,}, fake={fake_n:,})\n")
     return X, y
 
 
@@ -122,45 +146,47 @@ def load_folder(folder_path, label, label_name):
 def main():
     print("=" * 60)
     print("PRISM — Audio Deepfake Detection")
-    print("Step 2: Feature Extraction")
+    print("Step 2: Feature Extraction (FoR-norm)")
     print("=" * 60)
+    print(f"\n  Dataset : {DATASET_ROOT}")
+    print(f"  Sample rate : {SAMPLE_RATE} Hz  |  Max duration : {MAX_DURATION}s")
+    print(f"  Features per clip : 122\n")
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # Load REAL files (label = 0)
-    X_real, y_real = load_folder(REAL_DIR, label=0, label_name="REAL")
+    # ── Training split ──────────────────────────────────────────────────────
+    print("── training ────────────────────────────────────────────────")
+    X_train, y_train = load_split("training")
 
-    # Load FAKE files (label = 1)
-    X_fake, y_fake = load_folder(FAKE_DIR, label=1, label_name="FAKE")
+    # ── Validation split ────────────────────────────────────────────────────
+    print("── validation ──────────────────────────────────────────────")
+    X_val, y_val = load_split("validation")
 
-    # Combine
-    X = np.array(X_real + X_fake, dtype=np.float32)
-    y = np.array(y_real + y_fake, dtype=np.int32)
+    # ── Testing split ───────────────────────────────────────────────────────
+    print("── testing ─────────────────────────────────────────────────")
+    X_test, y_test = load_split("testing")
 
-    print(f"\n  Total samples     : {len(X)}")
-    print(f"  Feature size      : {X.shape[1]}")
-    print(f"  REAL (label 0)    : {(y==0).sum()}")
-    print(f"  FAKE (label 1)    : {(y==1).sum()}")
+    # ── Summary ─────────────────────────────────────────────────────────────
+    print("─" * 60)
+    print(f"  Feature vector size : {X_train.shape[1]}")
+    print(f"  Train   : {len(X_train):>7,} samples")
+    print(f"  Val     : {len(X_val):>7,} samples")
+    print(f"  Test    : {len(X_test):>7,} samples")
+    print(f"  Total   : {len(X_train)+len(X_val)+len(X_test):>7,} samples")
 
-    # Train / test split (stratified — keeps class balance in both splits)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=TEST_SIZE,
-        random_state=RANDOM_SEED,
-        stratify=y
-    )
-
-    print(f"\n  Train split : {len(X_train)} samples")
-    print(f"  Test split  : {len(X_test)} samples")
-
-    # Save
-    np.save(os.path.join(OUTPUT_DIR, "X_train.npy"), X_train)
-    np.save(os.path.join(OUTPUT_DIR, "y_train.npy"), y_train)
-    np.save(os.path.join(OUTPUT_DIR, "X_test.npy"),  X_test)
-    np.save(os.path.join(OUTPUT_DIR, "y_test.npy"),  y_test)
+    # ── Save ────────────────────────────────────────────────────────────────
+    saves = {
+        "X_train.npy": X_train, "y_train.npy": y_train,
+        "X_val.npy":   X_val,   "y_val.npy":   y_val,
+        "X_test.npy":  X_test,  "y_test.npy":  y_test,
+    }
+    for fname, arr in saves.items():
+        np.save(os.path.join(OUTPUT_DIR, fname), arr)
 
     print(f"\n✓ Features saved to '{OUTPUT_DIR}/'")
-    print("  X_train.npy  y_train.npy  X_test.npy  y_test.npy")
+    print("  X_train / y_train  — used in step3 for training")
+    print("  X_val   / y_val    — used in step3 for threshold tuning")
+    print("  X_test  / y_test   — used in step4 for final evaluation")
     print("\nProceed to step3_train_model.py")
 
 if __name__ == "__main__":

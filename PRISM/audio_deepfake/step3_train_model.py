@@ -1,11 +1,13 @@
 """
-STEP 3 — MODEL TRAINING (FIXED)
-================================
-Fixed issues:
-  1. Proper class balancing with oversampling
-  2. Threshold tuning — finds optimal decision boundary
+STEP 3 — MODEL TRAINING (FoR-norm)
+=====================================
+Updated for FoR-norm dataset:
+  1. Loads X_val / y_val (validation split) for threshold tuning
+     → threshold is tuned on val, NOT on test (prevents data leakage)
+  2. Proper class balancing with oversampling on train split only
   3. Probability calibration — makes confidence scores reliable
   4. Cross-validation — checks model isn't just memorizing
+  5. Final evaluation shown on both val and test sets
 
 Run:
     python step3_train_model.py
@@ -37,19 +39,22 @@ def load_features():
     print("Loading features...")
     X_train = np.load(os.path.join(FEATURES_DIR, "X_train.npy"))
     y_train = np.load(os.path.join(FEATURES_DIR, "y_train.npy"))
+    X_val   = np.load(os.path.join(FEATURES_DIR, "X_val.npy"))
+    y_val   = np.load(os.path.join(FEATURES_DIR, "y_val.npy"))
     X_test  = np.load(os.path.join(FEATURES_DIR, "X_test.npy"))
     y_test  = np.load(os.path.join(FEATURES_DIR, "y_test.npy"))
 
     real_count = (y_train == 0).sum()
     fake_count = (y_train == 1).sum()
     print(f"  Train : {X_train.shape[0]} samples  (REAL: {real_count}, FAKE: {fake_count})")
+    print(f"  Val   : {X_val.shape[0]} samples   (REAL: {(y_val==0).sum()}, FAKE: {(y_val==1).sum()})")
     print(f"  Test  : {X_test.shape[0]} samples   (REAL: {(y_test==0).sum()}, FAKE: {(y_test==1).sum()})")
 
     ratio = max(real_count, fake_count) / max(min(real_count, fake_count), 1)
     if ratio > 1.5:
         print(f"\n  ⚠  Class imbalance detected (ratio {ratio:.1f}x) — will oversample minority class")
 
-    return X_train, y_train, X_test, y_test
+    return X_train, y_train, X_val, y_val, X_test, y_test
 
 # ─── BALANCE CLASSES BY OVERSAMPLING ──────────────────────────────────────────
 
@@ -116,20 +121,21 @@ def evaluate(model, X, y, threshold=0.5, split_name="Test"):
 def main():
     print("=" * 60)
     print("PRISM — Audio Deepfake Detection")
-    print("Step 3: Model Training (Fixed)")
+    print("Step 3: Model Training (FoR-norm)")
     print("=" * 60)
 
     os.makedirs(MODEL_DIR, exist_ok=True)
 
-    X_train, y_train, X_test, y_test = load_features()
+    X_train, y_train, X_val, y_val, X_test, y_test = load_features()
 
-    # 1. Balance classes
+    # 1. Balance classes (train split only — never touch val or test)
     print("\nBalancing classes...")
     X_train_bal, y_train_bal = balance_classes(X_train, y_train)
 
-    # 2. Scale features
+    # 2. Scale features (fit on train, apply to val + test)
     scaler         = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train_bal)
+    X_val_scaled   = scaler.transform(X_val)
     X_test_scaled  = scaler.transform(X_test)
 
     # 3. Cross-validate to check learning quality
@@ -161,13 +167,14 @@ def main():
     calibrated.fit(X_train_scaled, y_train_bal)
     print(f"Done in {time.time() - start:.1f}s")
 
-    # 5. Find optimal threshold
-    print("\nFinding optimal decision threshold...")
-    best_threshold = find_best_threshold(calibrated, X_test_scaled, y_test)
+    # 5. Find optimal threshold on VALIDATION set (not test — prevents leakage)
+    print("\nFinding optimal decision threshold on validation set...")
+    best_threshold = find_best_threshold(calibrated, X_val_scaled, y_val)
 
-    # 6. Evaluate
-    evaluate(calibrated, X_test_scaled, y_test, threshold=0.5,            split_name="Test default")
-    evaluate(calibrated, X_test_scaled, y_test, threshold=best_threshold, split_name="Test optimal")
+    # 6. Evaluate on validation then final test set
+    evaluate(calibrated, X_val_scaled,  y_val,  threshold=best_threshold, split_name="Validation")
+    evaluate(calibrated, X_test_scaled, y_test, threshold=0.5,            split_name="Test (default threshold)")
+    evaluate(calibrated, X_test_scaled, y_test, threshold=best_threshold, split_name="Test (optimal threshold)")
 
     # 7. Save everything as one package
     package = {
