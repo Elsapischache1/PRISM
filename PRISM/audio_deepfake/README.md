@@ -2,69 +2,78 @@
 
 ## Folder Structure
 ```
-audio_deepfake/
-├── step1_dataset_setup.py      ← verify dataset is in place
-├── step2_feature_extraction.py ← extract MFCC + other features
-├── step3_train_model.py        ← train Random Forest classifier
-├── step4_evaluate.py           ← detailed evaluation + plots
-├── step5_predict.py            ← predict on a single audio file
-├── requirements.txt
-├── dataset/                    ← YOU place ASVspoof 2019 LA here
-│   └── LA/
-├── features/                   ← auto-created by step2
-├── model/                      ← auto-created by step3
-└── plots/                      ← auto-created by step4
+PRISM/
+├── audio_deepfake/                  ← run ALL scripts from here
+│   ├── step1_dataset_setup.py
+│   ├── step2_feature_extraction.py
+│   ├── step3_train_model.py
+│   ├── step4_evaluate.py
+│   ├── step5_predict.py
+│   ├── requirements.txt
+│   ├── features/                    ← auto-created by step2
+│   ├── model/                       ← auto-created by step3
+│   └── plots/                       ← auto-created by step4
+│
+└── dataset/
+    └── DEEP-VOICE/                  ← download from Kaggle
+        ├── REAL/                    ← real human speech (.mp3)
+        └── FAKE/                    ← AI generated speech (.mp3)
 ```
+
+## Dataset
+Download from Kaggle:
+https://www.kaggle.com/datasets/birdy654/deep-voice-deepfake-voice-recognition
+
+Unzip and place the DEEP-VOICE folder at: PRISM/dataset/DEEP-VOICE/
 
 ## Run Order
 
 ```bash
-# 0. Install dependencies
+# 0. Install dependencies (run once)
 pip install -r requirements.txt
 
-# 1. Download dataset manually from https://datashare.ed.ac.uk/handle/10283/3336
-#    Place in dataset/LA/
-
-# 2. Verify setup
+# 1. Verify dataset is in place
 python step1_dataset_setup.py
 
-# 3. Extract features (takes ~10-20 min depending on MAX_TRAIN_SAMPLES)
+# 2. Extract features from all audio files (~5-10 min)
 python step2_feature_extraction.py
 
-# 4. Train model (takes ~2-5 min on CPU)
+# 3. Train the Random Forest model (~2-5 min on CPU)
 python step3_train_model.py
 
-# 5. Evaluate with plots
+# 4. Evaluate with plots
 python step4_evaluate.py
 
-# 6. Test on a file
-python step5_predict.py path/to/audio.wav
+# 5. Test on any audio file
+python step5_predict.py path/to/audio.mp3
 ```
 
 ## How It Works
 
 ```
-Raw Audio (.wav/.flac/.mp3)
-         ↓
+REAL/ or FAKE/ folder
+        ↓
+Raw Audio (.mp3 / .wav)
+        ↓
 Feature Extraction (librosa)
-  - MFCCs (40 coeffs × mean+std = 80 features)
-  - Chroma (12 × 2 = 24)
-  - Spectral Contrast (7 × 2 = 14)
-  - Zero Crossing Rate (2)
-  - RMS Energy (2)
+  ├── MFCCs          (80 features) ← most important
+  ├── Chroma         (24 features)
+  ├── Spectral Contrast (14 features)
+  ├── Zero Crossing Rate (2 features)
+  └── RMS Energy     (2 features)
   ─────────────────────────────
   Total: 122 features per clip
-         ↓
+        ↓
 Random Forest Classifier (200 trees)
-         ↓
-Output: REAL / FAKE + confidence %
+        ↓
+REAL / FAKE + confidence %
 ```
 
-## Expected Performance
-- Accuracy: ~85–92% on ASVspoof 2019 LA dev set
-- ROC-AUC:  ~0.90–0.95
-- Inference time: ~0.5s per file on CPU
+## Labels
+- `0` = REAL (genuine human voice)
+- `1` = FAKE (AI generated / voice cloned)
 
-## Next Step
-After training, the `predict_audio()` function in `step5_predict.py`
-is imported directly by the FastAPI backend.
+## Expected Performance
+- Accuracy : ~88–95% on test split
+- ROC-AUC  : ~0.92–0.97
+- Inference : ~0.3–0.5s per file on CPU

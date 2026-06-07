@@ -1,53 +1,27 @@
 """
-STEP 1 — DATASET SETUP
-======================
-ASVspoof 2019 Logical Access dataset.
+STEP 1 — DATASET VERIFICATION
+===============================
+Verifies the DEEP-VOICE dataset is correctly placed.
 
-MANUAL DOWNLOAD STEPS (do this before running other scripts):
---------------------------------------------------------------
-1. Go to: https://datashare.ed.ac.uk/handle/10283/3336
-2. Register/login (free)
-3. Download these two files:
-     - LA.zip  (the Logical Access partition — ~4GB)
-4. Unzip into a folder called 'dataset/' in the same directory as these scripts.
+Expected folder structure:
+    PRISM/
+    ├── audio_deepfake/     ← run scripts from here
+    └── dataset/
+        └── DEEP-VOICE/
+            ├── REAL/       ← real human speech (.mp3)
+            └── FAKE/       ← AI generated / voice cloned (.mp3)
 
-Expected folder structure after unzipping:
-    dataset/
-    └── LA/
-        ├── ASVspoof2019_LA_train/
-        │   └── flac/          ← training audio files (.flac)
-        ├── ASVspoof2019_LA_dev/
-        │   └── flac/
-        ├── ASVspoof2019_LA_eval/
-        │   └── flac/
-        └── ASVspoof2019_LA_cm_protocols/
-            ├── ASVspoof2019.LA.cm.train.trn.txt   ← labels for train
-            ├── ASVspoof2019.LA.cm.dev.trl.txt     ← labels for dev
-            └── ASVspoof2019.LA.cm.eval.trl.txt    ← labels for eval
-
-LABEL FILE FORMAT (space-separated):
-    speaker_id  file_id  env  attack_type  label
-    e.g.:
-    LA_0079  LA_T_1138215  -  A01  spoof
-    LA_0079  LA_T_1271820  -  -    genuine
-
-'genuine' = REAL human voice
-'spoof'   = FAKE / deepfake voice
-
-Run this script to verify your setup is correct:
+Run:
+    cd PRISM/audio_deepfake
+    python step1_dataset_setup.py
 """
 
 import os
 import sys
 
-DATASET_DIR = "dataset/LA"
-
-REQUIRED_PATHS = [
-    "dataset/LA/ASVspoof2019_LA_train/flac",
-    "dataset/LA/ASVspoof2019_LA_dev/flac",
-    "dataset/LA/ASVspoof2019_LA_cm_protocols/ASVspoof2019.LA.cm.train.trn.txt",
-    "dataset/LA/ASVspoof2019_LA_cm_protocols/ASVspoof2019.LA.cm.dev.trl.txt",
-]
+DATASET_DIR = "../dataset/DEEP-VOICE"
+REAL_DIR    = os.path.join(DATASET_DIR, "REAL")
+FAKE_DIR    = os.path.join(DATASET_DIR, "FAKE")
 
 def verify_setup():
     print("=" * 60)
@@ -56,25 +30,39 @@ def verify_setup():
     print("=" * 60)
 
     all_good = True
-    for path in REQUIRED_PATHS:
+
+    # Check folders exist
+    for path, name in [(DATASET_DIR, "DEEP-VOICE/"), (REAL_DIR, "DEEP-VOICE/REAL/"), (FAKE_DIR, "DEEP-VOICE/FAKE/")]:
         exists = os.path.exists(path)
         status = "✓" if exists else "✗ MISSING"
-        print(f"  [{status}] {path}")
+        print(f"  [{status}] dataset/{name}")
         if not exists:
             all_good = False
 
-    print()
-    if all_good:
-        # Count files
-        train_flac = len([f for f in os.listdir("dataset/LA/ASVspoof2019_LA_train/flac") if f.endswith(".flac")])
-        dev_flac   = len([f for f in os.listdir("dataset/LA/ASVspoof2019_LA_dev/flac") if f.endswith(".flac")])
-        print(f"  Train audio files : {train_flac}")
-        print(f"  Dev audio files   : {dev_flac}")
-        print()
-        print("✓ Dataset is ready. Proceed to step2_feature_extraction.py")
-    else:
-        print("✗ Some paths are missing. Please follow the download instructions above.")
+    if not all_good:
+        print("\n✗ Some folders are missing.")
+        print("  Make sure your structure looks like:")
+        print("  PRISM/dataset/DEEP-VOICE/REAL/")
+        print("  PRISM/dataset/DEEP-VOICE/FAKE/")
         sys.exit(1)
+
+    # Count files
+    real_files = [f for f in os.listdir(REAL_DIR) if f.endswith(".mp3") or f.endswith(".wav")]
+    fake_files = [f for f in os.listdir(FAKE_DIR) if f.endswith(".mp3") or f.endswith(".wav")]
+
+    print(f"\n  REAL audio files : {len(real_files)}")
+    print(f"  FAKE audio files : {len(fake_files)}")
+    print(f"  Total            : {len(real_files) + len(fake_files)}")
+
+    if len(real_files) == 0 or len(fake_files) == 0:
+        print("\n✗ One or both folders are empty. Check your unzip.")
+        sys.exit(1)
+
+    # Show a few sample filenames
+    print(f"\n  Sample REAL files: {real_files[:3]}")
+    print(f"  Sample FAKE files: {fake_files[:3]}")
+
+    print("\n✓ Dataset looks good! Proceed to step2_feature_extraction.py")
 
 if __name__ == "__main__":
     verify_setup()

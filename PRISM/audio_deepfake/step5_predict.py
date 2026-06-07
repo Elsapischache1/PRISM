@@ -2,12 +2,11 @@
 STEP 5 — SINGLE FILE PREDICTION
 =================================
 Test the trained model on any audio file.
-This is the inference function that your FastAPI backend will call.
+The predict_audio() function here is imported directly by the FastAPI backend.
 
 Usage:
-    python step5_predict.py path/to/audio.wav
-    python step5_predict.py path/to/audio.flac
     python step5_predict.py path/to/audio.mp3
+    python step5_predict.py path/to/audio.wav
 """
 
 import sys
@@ -18,18 +17,18 @@ import librosa
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 
-MODEL_PATH  = "model/audio_deepfake_model.joblib"
-SAMPLE_RATE = 16000
+MODEL_PATH   = "model/audio_deepfake_model.joblib"
+SAMPLE_RATE  = 16000
 MAX_DURATION = 4.0
-N_MFCC = 40
+N_MFCC       = 40
 
-# ─── FEATURE EXTRACTION (same as step2 — must be identical) ───────────────────
+# ─── FEATURE EXTRACTION (must be identical to step2) ──────────────────────────
 
 def extract_features(audio_path, sr=SAMPLE_RATE, max_duration=MAX_DURATION):
     max_samples = int(sr * max_duration)
 
     try:
-        y, _ = librosa.load(audio_path, sr=sr, duration=max_duration)
+        y, _ = librosa.load(audio_path, sr=sr, duration=max_duration, mono=True)
     except Exception as e:
         raise ValueError(f"Could not load audio file: {e}")
 
@@ -61,28 +60,34 @@ def extract_features(audio_path, sr=SAMPLE_RATE, max_duration=MAX_DURATION):
     return np.array(features, dtype=np.float32)
 
 
-# ─── INFERENCE FUNCTION (used by FastAPI) ─────────────────────────────────────
+# ─── INFERENCE FUNCTION (imported by FastAPI backend) ─────────────────────────
 
 def predict_audio(audio_path: str) -> dict:
     """
-    Main inference function.
-    Returns a dict with verdict, confidence, and probabilities.
+    Main inference function — called by the FastAPI backend.
 
-    This function is imported by the FastAPI backend.
+    Returns:
+        {
+            "verdict"    : "REAL" or "FAKE",
+            "confidence" : float (0–100),
+            "p_real"     : float (0–100),
+            "p_fake"     : float (0–100),
+            "file"       : filename string
+        }
     """
     if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(f"Model not found at '{MODEL_PATH}'. Run step3_train_model.py first.")
+        raise FileNotFoundError(
+            f"Model not found at '{MODEL_PATH}'. Run step3_train_model.py first."
+        )
 
-    model = joblib.load(MODEL_PATH)
+    model    = joblib.load(MODEL_PATH)
+    features = extract_features(audio_path).reshape(1, -1)
 
-    features = extract_features(audio_path)
-    features = features.reshape(1, -1)  # model expects 2D array
-
-    prediction  = model.predict(features)[0]          # 0=genuine, 1=spoof
-    probability = model.predict_proba(features)[0]     # [p_genuine, p_spoof]
+    prediction  = model.predict(features)[0]        # 0=REAL, 1=FAKE
+    probability = model.predict_proba(features)[0]  # [p_real, p_fake]
 
     label      = "FAKE" if prediction == 1 else "REAL"
-    confidence = float(probability[prediction]) * 100  # confidence in the prediction
+    confidence = float(probability[prediction]) * 100
     p_real     = float(probability[0]) * 100
     p_fake     = float(probability[1]) * 100
 
@@ -104,8 +109,8 @@ def main():
     print("=" * 60)
 
     if len(sys.argv) < 2:
-        print("\nUsage: python step5_predict.py <path_to_audio_file>")
-        print("Supported formats: .wav, .flac, .mp3, .ogg")
+        print("\nUsage: python step5_predict.py <audio_file>")
+        print("Supported: .mp3  .wav  .flac  .ogg")
         sys.exit(1)
 
     audio_path = sys.argv[1]
@@ -123,22 +128,12 @@ def main():
         print(f"✗ Error: {e}")
         sys.exit(1)
 
-    verdict    = result["verdict"]
-    confidence = result["confidence"]
-    p_real     = result["p_real"]
-    p_fake     = result["p_fake"]
-
-    # Display
     print("\n" + "─" * 40)
-    if verdict == "FAKE":
-        verdict_display = "🔴 DEEPFAKE DETECTED"
-    else:
-        verdict_display = "🟢 GENUINE AUDIO"
-
-    print(f"  Verdict     : {verdict_display}")
-    print(f"  Confidence  : {confidence:.1f}%")
-    print(f"  P(Real)     : {p_real:.1f}%")
-    print(f"  P(Fake)     : {p_fake:.1f}%")
+    icon = "🔴 DEEPFAKE DETECTED" if result["verdict"] == "FAKE" else "🟢 GENUINE AUDIO"
+    print(f"  Verdict     : {icon}")
+    print(f"  Confidence  : {result['confidence']:.1f}%")
+    print(f"  P(Real)     : {result['p_real']:.1f}%")
+    print(f"  P(Fake)     : {result['p_fake']:.1f}%")
     print("─" * 40)
 
 if __name__ == "__main__":
