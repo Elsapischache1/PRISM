@@ -18,10 +18,8 @@ env/
 # ── Model & feature files (large binaries — use Git LFS or exclude entirely) ──
 audio_deepfake/model/*.joblib
 audio_deepfake/features/*.npy
-video_deepfake/model/*.pt
-video_deepfake/model/*.pth
-video_deepfake/model/*.h5
 video_deepfake/features/
+video_deepfake/model/checkpoints/
 
 # ── Dataset (never commit raw data) ───────────────────────────────────────────
 dataset/
