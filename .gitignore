@@ -19,7 +19,8 @@ env/
 audio_deepfake/model/*.joblib
 audio_deepfake/features/*.npy
 video_deepfake/features/
-video_deepfake/model/checkpoints/
+backend/video_deepfake/model/checkpoints/
+backend/video_deepfake/results/
 
 # ── Dataset (never commit raw data) ───────────────────────────────────────────
 dataset/
